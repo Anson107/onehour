@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>牛奶与热水温度动态曲线 | 延长至58分钟 (牛顿冷却预测)</title>
+    <!-- ECharts 核心库 -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #eef2f9 0%, #e0e8f0 100%);
+            font-family: 'Segoe UI', 'Roboto', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 24px 16px;
+        }
+
+        .chart-card {
+            max-width: 1400px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.94);
+            backdrop-filter: blur(2px);
+            border-radius: 2rem;
+            box-shadow: 0 25px 45px -12px rgba(0, 0, 0, 0.25), 0 2px 5px rgba(0, 0, 0, 0.02);
+            overflow: hidden;
+            transition: all 0.2s;
+            border: 1px solid rgba(255, 255, 255, 0.6);
+        }
+
+        .chart-header {
+            padding: 1.3rem 2rem 0.5rem 2rem;
+            background: rgba(255, 255, 255, 0.7);
+            border-bottom: 1px solid #e2e9f2;
+        }
+
+        .chart-header h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: linear-gradient(120deg, #1e2e3e, #2c4c6c);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            letter-spacing: -0.3px;
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .badge {
+            font-size: 0.8rem;
+            background: #e9ecef;
+            color: #2c3e50;
+            border-radius: 60px;
+            padding: 4px 14px;
+            font-weight: 500;
+        }
+
+        .info-panel {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-top: 14px;
+            margin-bottom: 6px;
+            background: #f8fafd;
+            padding: 10px 20px;
+            border-radius: 48px;
+        }
+
+        .live-data {
+            display: flex;
+            gap: 32px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .live-data div span:first-child {
+            font-weight: 600;
+            margin-right: 6px;
+        }
+
+        .time-live, .milk-live, .water-live {
+            background: white;
+            padding: 4px 16px;
+            border-radius: 40px;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        .milk-live { color: #e67e22; border-left: 3px solid #e67e22; background: #fff4eb; }
+        .water-live { color: #3498db; border-left: 3px solid #3498db; background: #eef6ff; }
+        .time-live { background: #eef2f5; color: #2c3e50; font-weight: 700; }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            border: none;
+            background: white;
+            padding: 6px 20px;
+            border-radius: 32px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: 0.2s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            color: #2c3e50;
+            border: 1px solid #cfdfed;
+        }
+
+        .btn-primary {
+            background: #2c3e50;
+            color: white;
+            border: none;
+            box-shadow: 0 4px 10px rgba(44,62,80,0.2);
+        }
+
+        .btn-primary:hover {
+            background: #1e2f3f;
+            transform: translateY(-2px);
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            background: #f0f4f9;
+        }
+
+        .chart-container {
+            width: 100%;
+            height: 540px;
+            padding: 0.6rem 0.3rem 0.2rem 0.3rem;
+        }
+
+        .footer-note {
+            text-align: center;
+            font-size: 0.72rem;
+            color: #5f7f9e;
+            padding: 0.7rem 1rem 1.2rem;
+            border-top: 1px solid #e2e8f0;
+            background: #fefefe;
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 750px) {
+            .chart-container { height: 440px; }
+            .info-panel { flex-direction: column; align-items: stretch; border-radius: 28px; }
+            .live-data { justify-content: space-between; }
+            .chart-header h1 { font-size: 1.3rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="chart-card">
+    <div class="chart-header">
+        <h1>
+            📈 牛奶 🥛 vs 热水 ♨️
+        </h1>
+        <!-- 已移除原说明文字：0-28分钟实验数据 / 牛顿外推 / 逐点动画演示等描述 -->
+        <div class="info-panel">
+            <div class="live-data">
+                <div>🕒 当前时刻: <span id="currentTimeLabel" class="time-live">— 分钟</span></div>
+                <div>🥛 牛奶温度: <span id="currentMilkTemp" class="milk-live">— ℃</span></div>
+                <div>💧 热水温度: <span id="currentWaterTemp" class="water-live">— ℃</span></div>
+            </div>
+            <div class="btn-group">
+                <button id="resetBtn" class="btn btn-primary">🔄 重放完整动画</button>
+            </div>
+        </div>
+    </div>
+    <div id="extendedChart" class="chart-container"></div>
+    <div class="footer-note">
+        <span>📐 预测模型: T(t) = T_env + (T₀ - T_env)·exp(-k·Δt) , T_env=18℃ , k=0.04 , T₀=43.5℃ (28min)</span>
+        <span>🎯 最终温度 (58min) ≈ 25.7℃ ，逐步趋近室温</span>
+    </div>
+</div>
+
+<script>
+    (function() {
+        // ======================== 原始数据 (0 ~ 28分钟，间隔2分钟) ========================
+        const originalTimes = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28];
+        const originalMilk = [20.3, 48.1, 54.6, 55.3, 54.8, 54.3, 53.6, 52.3, 51.6, 49.6, 48.6, 47.0, 46.3, 45.5, 43.5];
+        const originalWater = [62.0, 58.6, 56.9, 56.1, 55.0, 54.3, 53.6, 52.4, 51.7, 50.1, 48.6, 47.0, 46.3, 45.5, 43.5];
+        
+        // 延长参数: 从28分钟开始再延长30分钟 (到58分钟，步长2分钟，共15个额外点)
+        const extendStartTime = 28;      // 分钟
+        const extendDuration = 30;       // 延长30分钟 => 终点 58分钟
+        const step = 2;                  // 每2分钟一个点
+        const extendSteps = extendDuration / step;  // 15个新点
+        
+        // 环境温度 (基于牛顿冷却，实际冷却趋于室温，设定18°C 让降温明显且合理)
+        const envTemp = 18.0;
+        // 冷却系数 k = 0.04 (min⁻¹) 使得从43.5℃经过30分钟降到约25.7℃，视觉平滑且符合物理预期
+        const coolingRate = 0.04;   // 每分钟衰减常数
+        
+        // 28分钟时的起始温度 (牛奶和热水在28分钟均为43.5℃)
+        const startTempExtend = 43.5;
+        
+        // 生成延长时间点数组 (30, 32, 34 ... 58)
+        const extendedTimes = [];
+        for (let i = 1; i <= extendSteps; i++) {
+            extendedTimes.push(extendStartTime + i * step);
+        }
+        
+        // 根据牛顿冷却定律计算延长部分温度: T(t_rel) = T_env + (T0 - T_env) * exp(-k * t_rel)
+        // t_rel: 相对于28分钟的分钟数 (0,2,4...30)
+        function computeExtendedTemp(relMinutes) {
+            return envTemp + (startTempExtend - envTemp) * Math.exp(-coolingRate * relMinutes);
+        }
+        
+        // 生成延长部分的温度序列 (牛奶与热水在延长阶段保持一致，因为28分钟后两者已完全相同且比热容趋同)
+        const extendedMilk = [];
+        const extendedWater = [];
+        for (let idx = 0; idx < extendSteps; idx++) {
+            const relTime = (idx + 1) * step;   // 2,4,6...30分钟
+            let temp = computeExtendedTemp(relTime);
+            // 保留一位小数，与原始数据风格一致
+            temp = Math.round(temp * 10) / 10;
+            extendedMilk.push(temp);
+            extendedWater.push(temp);
+        }
+        
+        // ========== 合并完整的时间轴与温度数据 (0 ~ 58分钟，共 15+15 = 30个点) ==========
+        const fullTimes = [...originalTimes, ...extendedTimes];
+        const fullMilk = [...originalMilk, ...extendedMilk];
+        const fullWater = [...originalWater, ...extendedWater];
+        
+        const totalPoints = fullTimes.length;   // 30个点
+        
+        // 校验长度一致性
+        console.log(`完整数据点数: ${totalPoints}, 时间范围: ${fullTimes[0]} ~ ${fullTimes[totalPoints-1]} 分钟`);
+        
+        // 动态存储 (逐步填充)
+        let currentMilkData = new Array(totalPoints).fill(null);
+        let currentWaterData = new Array(totalPoints).fill(null);
+        
+        // 动画控制
+        let animationTimer = null;
+        let currentIndex = 0;          // 下一个将要绘制的点索引
+        let isAnimating = false;
+        
+        // ECharts 实例
+        let chart = null;
+        
+        // DOM 元素
+        const currentTimeSpan = document.getElementById('currentTimeLabel');
+        const currentMilkSpan = document.getElementById('currentMilkTemp');
+        const currentWaterSpan = document.getElementById('currentWaterTemp');
+        const resetBtn = document.getElementById('resetBtn');
+        
+        // 辅助: 更新实时信息面板 (基于最新一个非空数据点)
+        function updateLiveInfoPanel() {
+            let lastValidIdx = -1;
+            for (let i = totalPoints - 1; i >= 0; i--) {
+                if (currentMilkData[i] !== null && currentWaterData[i] !== null) {
+                    lastValidIdx = i;
+                    break;
+                }
+            }
+            if (lastValidIdx !== -1) {
+                const timeVal = fullTimes[lastValidIdx];
+                const milkVal = currentMilkData[lastValidIdx];
+                const waterVal = currentWaterData[lastValidIdx];
+                currentTimeSpan.innerText = `${timeVal} 分钟`;
+                currentMilkSpan.innerText = `${milkVal.toFixed(1)} ℃`;
+                currentWaterSpan.innerText = `${waterVal.toFixed(1)} ℃`;
+            } else {
+                currentTimeSpan.innerText = `0 分钟`;
+                currentMilkSpan.innerText = `— ℃`;
+                currentWaterSpan.innerText = `— ℃`;
+            }
+        }
+        
+        // 渲染图表 (基于当前 currentMilkData / currentWaterData)
+        function renderChart() {
+            if (!chart) return;
+            chart.setOption({
+                series: [
+                    {
+                        name: '牛奶温度',
+                        type: 'line',
+                        data: currentMilkData.slice(),
+                        connectNulls: false,
+                        symbol: 'circle',
+                        symbolSize: 7,
+                        lineStyle: { width: 3, color: '#e67e22', shadowBlur: 6, shadowColor: '#e67e2240' },
+                        itemStyle: { color: '#e67e22', borderColor: '#fff', borderWidth: 2 },
+                        areaStyle: { opacity: 0.08, color: '#e67e22' }
+                    },
+                    {
+                        name: '热水温度',
+                        type: 'line',
+                        data: currentWaterData.slice(),
+                        connectNulls: false,
+                        symbol: 'diamond',
+                        symbolSize: 7,
+                        lineStyle: { width: 3, color: '#3498db', shadowBlur: 6, shadowColor: '#3498db40' },
+                        itemStyle: { color: '#3498db', borderColor: '#fff', borderWidth: 2 },
+                        areaStyle: { opacity: 0.08, color: '#3498db' }
+                    }
+                ]
+            }, { notMerge: false });
+            updateLiveInfoPanel();
+        }
+        
+        // 重置所有数据为null (清空曲线)
+        function resetDataToNull() {
+            currentMilkData = new Array(totalPoints).fill(null);
+            currentWaterData = new Array(totalPoints).fill(null);
+            currentIndex = 0;
+            if (chart) {
+                renderChart();
+            }
+            currentTimeSpan.innerText = `0 分钟`;
+            currentMilkSpan.innerText = `— ℃`;
+            currentWaterSpan.innerText = `— ℃`;
+        }
+        
+        // 停止动画
+        function stopAnimation() {
+            if (animationTimer) {
+                clearInterval(animationTimer);
+                animationTimer = null;
+            }
+            isAnimating = false;
+        }
+        
+        // 添加下一个数据点 (增量绘制)
+        function addNextDataPoint() {
+            if (currentIndex >= totalPoints) {
+                stopAnimation();
+                isAnimating = false;
+                return;
+            }
+            // 填充当前索引的真实数据
+            currentMilkData[currentIndex] = fullMilk[currentIndex];
+            currentWaterData[currentIndex] = fullWater[currentIndex];
+            renderChart();
+            currentIndex++;
+            
+            if (currentIndex === totalPoints) {
+                stopAnimation();
+                isAnimating = false;
+                // 最终确保显示完整数据
+                renderChart();
+            }
+        }
+        
+        // 开始动画 (逐点绘制，从当前数据状态继续)
+        function startAnimation() {
+            if (animationTimer) {
+                stopAnimation();
+            }
+            // 若已经绘制完整 (最后一个点存在数据) 并且索引已达到末尾，则重置后播放，更符合直觉
+            if (currentIndex >= totalPoints && currentMilkData[totalPoints-1] !== null) {
+                resetDataToNull();
+            }
+            // 如果第一个点还没绘制且数据为空，立即绘制第0分钟的点，让图表有初始值
+            if (currentIndex === 0 && currentMilkData[0] === null) {
+                addNextDataPoint();  // 绘制0分钟点
+            }
+            isAnimating = true;
+            // 每380毫秒绘制一个点，总时长约11.4秒，舒适观看
+            animationTimer = setInterval(() => {
+                if (currentIndex >= totalPoints) {
+                    stopAnimation();
+                    isAnimating = false;
+                    return;
+                }
+                addNextDataPoint();
+                if (currentIndex >= totalPoints) {
+                    stopAnimation();
+                    isAnimating = false;
+                }
+            }, 380);
+        }
+        
+        // 重置并重播 (完全清空，重新开始动画)
+        function resetAndReplay() {
+            stopAnimation();
+            resetDataToNull();
+            setTimeout(() => {
+                startAnimation();
+            }, 30);
+        }
+        
+        // 初始化 ECharts 配置 (固定轴，添加室温参考线)
+        function initChart() {
+            const dom = document.getElementById('extendedChart');
+            if (!dom) return;
+            chart = echarts.init(dom);
+            
+            // 准备x轴数据 (类别轴显示时间字符串)
+            const xAxisData = fullTimes.map(t => t.toString());
+            
+            const baseOption = {
+                title: { show: false },
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow', label: { backgroundColor: '#2c3e50' } },
+                    formatter: function(params) {
+                        if (!params || params.length === 0) return '';
+                        let timeValue = '';
+                        let res = `<strong>⏱️ 温度快照</strong><br/>`;
+                        params.forEach(p => {
+                            if (p.value !== null && p.value !== undefined) {
+                                if (!timeValue && p.axisValue) timeValue = p.axisValue;
+                                let marker = p.marker;
+                                let series = p.seriesName;
+                                let temp = p.value;
+                                res += `${marker} ${series}: <b>${temp.toFixed(1)} ℃</b><br/>`;
+                            }
+                        });
+                        if (params[0] && params[0].axisValue) {
+                            res = `<strong>🕒 ${params[0].axisValue} 分钟</strong><br/>` + res.replace('<strong>⏱️ 温度快照</strong><br/>', '');
+                        }
+                        return res;
+                    },
+                    backgroundColor: 'rgba(255,255,245,0.96)',
+                    borderColor: '#bdd4e8',
+                    borderWidth: 1
+                },
+                legend: {
+                    data: [
+                        { name: '牛奶温度', icon: 'circle', textStyle: { color: '#e67e22', fontWeight: 'bold' } },
+                        { name: '热水温度', icon: 'diamond', textStyle: { color: '#3498db', fontWeight: 'bold' } }
+                    ],
+                    orient: 'horizontal',
+                    left: 'center',
+                    top: 0,
+                    backgroundColor: 'rgba(255,255,245,0.7)',
+                    borderRadius: 30,
+                    padding: [4, 20, 4, 20],
+                    itemWidth: 25,
+                },
+                grid: {
+                    left: '7%',
+                    right: '6%',
+                    top: '12%',
+                    bottom: '8%',
+                    containLabel: true,
+                    backgroundColor: '#fefef7',
+                },
+                xAxis: {
+                    type: 'category',
+                    name: '时间 (分钟)',
+                    nameLocation: 'middle',
+                    nameGap: 35,
+                    data: xAxisData,
+                    axisLabel: {
+                        rotate: 0,
+                        fontSize: 10,
+                        interval: 2,    // 每两个点显示一个标签，避免拥挤
+                        margin: 8,
+                        color: '#2c4e6e'
+                    },
+                    axisLine: { lineStyle: { color: '#9aaebf', width: 2 } },
+                    axisTick: { alignWithLabel: true, length: 5 },
+                    splitLine: { show: false }
+                },
+                yAxis: {
+                    type: 'value',
+                    name: '温度 (℃)',
+                    nameLocation: 'middle',
+                    nameGap: 48,
+                    min: 16,
+                    max: 65,
+                    splitLine: { lineStyle: { type: 'dashed', color: '#cfdfed' } },
+                    axisLabel: { fontSize: 10, fontWeight: 500, formatter: '{value}°C' },
+                    axisLine: { show: false }
+                },
+                series: [
+                    {
+                        name: '牛奶温度',
+                        type: 'line',
+                        data: currentMilkData.slice(),
+                        smooth: false,
+                        symbol: 'circle',
+                        symbolSize: 7,
+                        lineStyle: { width: 3, color: '#e67e22', cap: 'round' },
+                        itemStyle: { color: '#e67e22', borderColor: '#fff', borderWidth: 2 },
+                        animation: true,
+                        animationDuration: 350
+                    },
+                    {
+                        name: '热水温度',
+                        type: 'line',
+                        data: currentWaterData.slice(),
+                        smooth: false,
+                        symbol: 'diamond',
+                        symbolSize: 7,
+                        lineStyle: { width: 3, color: '#3498db', cap: 'round' },
+                        itemStyle: { color: '#3498db', borderColor: '#fff', borderWidth: 2 },
+                        animation: true,
+                        animationDuration: 350
+                    }
+                ],
+                // 添加室温参考线 (环境温度18°C)
+                graphic: [
+                    {
+                        type: 'line',
+                        shape: { y1: 0, y2: 1, x1: 0, x2: 1 },
+                        style: { stroke: '#7f8c8d', lineWidth: 1.5, lineDash: [8, 6] },
+                        scaleX: 1,
+                        scaleY: 1,
+                        left: '0%',
+                        right: '0%',
+                        top: `${((envTemp - 16) / (65 - 16)) * 100}%`,  // 动态计算参考线位置 (min=16, max=65)
+                        bounding: 'raw',
+                        z: 5,
+                        invisible: false,
+                        name: '室温参考线'
+                    }
+                ],
+                // 辅助标注室温文字
+                title: {
+                    show: true,
+                    text: `🌡️ 环境温度 ${envTemp}℃ (预测基准)`,
+                    left: 'left',
+                    top: 10,
+                    textStyle: { fontSize: 11, color: '#6c8eae', fontWeight: 'normal', backgroundColor: 'rgba(255,255,240,0.7)', padding: [2, 8, 2, 8], borderRadius: 20 }
+                }
+            };
+            
+            chart.setOption(baseOption);
+            // 动态修正室温参考线位置：因为图形比例需要动态适配，但graphic使用百分比可自适应
+            window.addEventListener('resize', () => { chart && chart.resize(); });
+        }
+        
+        // 页面完全启动
+        function setup() {
+            initChart();
+            resetDataToNull();     // 清空数据，索引归零
+            setTimeout(() => {
+                startAnimation();   // 开始动态绘制
+            }, 180);
+        }
+        
+        // 绑定重置按钮事件
+        resetBtn.addEventListener('click', () => {
+            resetAndReplay();
+        });
+        
+        setup();
+    })();
+</script>
+</body>
+</html>
